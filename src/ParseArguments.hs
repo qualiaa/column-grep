@@ -78,6 +78,10 @@ parseArgument = do
   targetCols <- P.sepBy1 parseColSpec (P.word8 comma)
   finished <- P.atEnd
   if finished
-    then return . Left $ TargetColumns targetCols
-    else let comparison = (parseUncompiledRegex <|> parseLiteralMatch)
-         in Right . Comparator . (TargetColumns targetCols,) <$> comparison
+    then return $ Left targetCols
+    else let comparison = (P.word8 equals
+                           P.<?> "Expected '=' (ambiguous parse?)")
+                          *> (parseUncompiledRegex <|> parseLiteralMatch)
+         in Right . (targetCols,) <$> comparison
+
+parseArguments = map (P.parseOnly parseArgument . C8.pack)
