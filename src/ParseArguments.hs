@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings, TupleSections #-}
 module ParseArguments
     ( parseColSpec
-    , parseArgument
+    , parseArguments
+    , OutputColumns
+    , Comparator
     ) where
 
 import Control.Applicative ((<|>))
@@ -12,6 +14,8 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 
 pcreSpecialCharacters = "\\|?*+.^${[()" :: BS.ByteString
+import ColSpec
+
 
 comma = c2w ','
 equals = c2w '='
@@ -21,15 +25,8 @@ slash = c2w '/'
 
 newtype UncompiledRegex = UncompiledRegex BS.ByteString
     deriving Show
-data Range = RangeFull | RangeTo Int | RangeFrom Int | Range Int Int | Single Int
-    deriving Show
-data ColSpec = ColRange Range | ColName UncompiledRegex
-    deriving Show
-
-newtype TargetColumns = TargetColumns [ColSpec]
-    deriving Show
-newtype Comparator = Comparator (TargetColumns, UncompiledRegex)
-    deriving Show
+type OutputColumns = [ColSpec]
+type Comparator = ([ColSpec], UncompiledRegex)
 
 regexEscape :: [Word8] -> [Word8]
 regexEscape [] = []
@@ -41,7 +38,7 @@ parseLiteralMatch :: P.Parser UncompiledRegex
 parseUncompiledRegex :: P.Parser UncompiledRegex
 parseColRange :: P.Parser Range
 parseColSpec :: P.Parser ColSpec
-parseArgument :: P.Parser (Either TargetColumns Comparator)
+parseArgument :: P.Parser (Either OutputColumns Comparator)
 
 parseUncompiledRegex = UncompiledRegex <$> regexString
   where regexString = BS.pack <$> (P.word8 slash >> P.manyTill regexChar (P.word8 slash))
@@ -71,11 +68,11 @@ parseRange = do
   end <- parseInteger
   return $ Range start end
 parseRangeFrom = RangeFrom <$> parseInteger <* P.word8 colon
-parseRangeSingle = Single <$> parseInteger
 
-parseColRange = P.choice [parseRangeTo, parseRangeFull, parseRange, parseRangeFrom, parseRangeSingle]
+parseColRange = P.choice [parseRangeTo, parseRangeFull, parseRange, parseRangeFrom]
 
 parseColSpec = ColRange <$> parseColRange
+           <|> ColIndex <$> parseIndex
            <|> ColName <$> (parseUncompiledRegex <|> parseLiteralMatch)
 
 parseArgument = do
