@@ -13,9 +13,9 @@ import qualified Data.Attoparsec.ByteString as P
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 
-pcreSpecialCharacters = "\\|?*+.^${[()" :: BS.ByteString
 import ColSpec
 
+pcreSpecialCharacters = BS.unpack "\\|?*+.^${[()"
 
 comma = c2w ','
 equals = c2w '='
@@ -23,15 +23,13 @@ colon = c2w ':'
 backslash = c2w '\\'
 slash = c2w '/'
 
-newtype UncompiledRegex = UncompiledRegex BS.ByteString
-    deriving Show
 type OutputColumns = [ColSpec]
 type Comparator = ([ColSpec], UncompiledRegex)
 
 regexEscape :: [Word8] -> [Word8]
 regexEscape [] = []
 regexEscape (c:cs)
-  | c `elem` BS.unpack pcreSpecialCharacters = backslash:c:regexEscape cs
+  | c `elem` pcreSpecialCharacters = backslash:c:regexEscape cs
   | otherwise = c:regexEscape cs
 
 parseLiteralMatch :: P.Parser UncompiledRegex
@@ -59,15 +57,16 @@ parseInteger = do
   digits <- P.takeWhile1 isDigit
   let string = C8.unpack $ maybe digits (`BS.cons` digits) sign
   return $ read string
+parseIndex = pred <$> parseInteger
 
-parseRangeTo = P.word8 colon *> (RangeTo <$> parseInteger)
+parseRangeTo = P.word8 colon *> (RangeTo <$> parseIndex)
 parseRangeFull = P.word8 colon *> return RangeFull
 parseRange = do
-  start <- parseInteger
+  start <- parseIndex
   P.word8 colon
-  end <- parseInteger
+  end <- parseIndex
   return $ Range start end
-parseRangeFrom = RangeFrom <$> parseInteger <* P.word8 colon
+parseRangeFrom = RangeFrom <$> parseIndex <* P.word8 colon
 
 parseColRange = P.choice [parseRangeTo, parseRangeFull, parseRange, parseRangeFrom]
 
