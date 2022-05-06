@@ -2,7 +2,6 @@ module Main where
 
 import Data.Either
 import System.Environment (getArgs)
-import Lib
 import Data.Attoparsec.ByteString (parseOnly)
 import Data.ByteString.Char8 (pack)
 import qualified Data.ByteString.Lazy.Char8 as LC8
