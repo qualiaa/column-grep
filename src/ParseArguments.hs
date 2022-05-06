@@ -57,7 +57,7 @@ parseInteger = do
   digits <- P.takeWhile1 isDigit
   let string = C8.unpack $ maybe digits (`BS.cons` digits) sign
   return $ read string
-parseIndex = pred <$> parseInteger
+parseIndex = parseInteger
 
 parseRangeTo = P.word8 colon *> (RangeTo <$> parseIndex)
 parseRangeFull = P.word8 colon *> return RangeFull
