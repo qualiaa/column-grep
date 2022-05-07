@@ -7,7 +7,6 @@ module ColSpec
   ) where
 
 import Data.Function((&))
-import Data.Functor((<&>))
 import Data.List (findIndices)
 import Data.Ix (inRange)
 import qualified Data.ByteString as BS
@@ -38,7 +37,10 @@ resolve :: [BS.ByteString] -> Int -> ColSpec -> IO (Result [Int])
 resolve _ maxIndex (ColRange range) = return . Right $ indices maxIndex range
 
 resolve _ maxIndex (ColIndex i) = return $
-  if i & inRange (0, maxIndex) then Right [i] else Left "Invalid index!"
+  if i & inRange (1, maxIndex)
+  then Right [i]
+  else Left $ concat ["Invalid index: ", show i,
+                       " not within [1, ", show maxIndex, "]"]
 
 resolve colNames _ (ColName regex) = do
   -- TODO: Error if no matches
@@ -46,4 +48,5 @@ resolve colNames _ (ColName regex) = do
   return $ findMatchIndices colNames <$> regex
 
 findMatchIndices :: [BS.ByteString] -> Regex -> [Int]
-findMatchIndices strings regex = findIndices (RE.matchTest regex) strings
+findMatchIndices strings regex = findIndices' (RE.matchTest regex) strings
+    where findIndices' p xs = map succ $ findIndices p xs
