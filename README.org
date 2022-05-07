@@ -45,7 +45,7 @@ all rows where any of these columns' values equals =300=.
 A /name/ is a regex, surrounded in =/=\zwnj{}s, such as =/a.*c?e+$/=, or a raw string
 such as =Age=. Regex matching occurs throughout the string, so the =^$= anchors
 are important for efficient matching. A raw string =Age= is equivalent to
-=/^abc$/=.
+=/^Age$/=.
 
 An /index/ is an integer. Columns are indexed from =1=. Negative indices are
 permitted, where =-1= refers to the last column, =-2= the second-to-last, /&c./
