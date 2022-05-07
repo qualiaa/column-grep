@@ -42,7 +42,7 @@ and a single /name/. Put another way, ~column-spec[,column-spec ...]=name~. For
 example, =/Age$/=300= will match all columns whose name ends in =Age=, and match
 all rows where any of these columns' values equals =300=.
 
-A /name/ is a regex, surrounded in =/=s, such as =/a.*c?e+$/=, or a raw string
+A /name/ is a regex, surrounded in =/=\zwnj{}s, such as =/a.*c?e+$/=, or a raw string
 such as =Age=. Regex matching occurs throughout the string, so the =^$= anchors
 are important for efficient matching. A raw string =Age= is equivalent to
 =/^abc$/=.
