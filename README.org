@@ -98,13 +98,13 @@ To print every column whose name is "Age":
 
 To print every column whose name ends with "Age":
 #+begin_src shell
-  column-grep /Age$/
+  column-grep '/ Age$/'
 #+end_src
 
 To print the first column, as well as every column whose name is "First Name" or
-ends with "Age":
+starts with "type-":
 #+begin_src shell
-  column-grep 1 "First Name" /Age$/
+  column-grep 1 "First Name" /^type-/
 #+end_src
 
 To print every column (equivalent to ~cat~):
@@ -129,7 +129,7 @@ To print every row containing a cell which is either empty or "NA":
 To print every row where the value of any column ending with "Severity" is set
 to high, and also check the first column and last two columns from the end:
 #+begin_src shell
-  column-grep / Severity$/,1,-2:=HIGH
+  column-grep 1,'/ Severity$/',-2:=HIGH
 #+end_src
 
 **** Conjunctive and disjunctive comparators
