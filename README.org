@@ -29,6 +29,11 @@ The filter descriptions are built up of /output/\zwnj{}s and /comparator/\zwnj{}
   column-grep [output|comparator] ... < input.csv > output.csv
 #+end_src
 
+An /output/ specifies one or more columns to print in the output. A /comparator/
+specifies a matching rule for each row, based on the value of its fields. If no
+/output/\zwnj{}s are specified, then all columns are printed; if no /comparator/\zwnj{}s are
+specified, all rows are printed.
+
 An /output/ is a /column-spec/. A /column-spec/ is either a /name/, an /index/,
 or a /range/ of indices.
 
