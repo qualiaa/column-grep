@@ -51,5 +51,5 @@ An /index/ is an integer. Columns are indexed from =1=. Negative indices are
 permitted, where =-1= refers to the last column, =-2= the second-to-last, /&c./
 
 A /range/ is specified as =[index]:[index]=, where indices are inclusive. If
-either index is not specified, such as in =5:=, =:-2= or =:=, it is takes the
-whole remaining range (so =:= matches every column).
+either index is not specified, such as in =5:=, =:-2= or =:=, it takes the whole
+remaining range (so =:= matches every column).
