@@ -33,7 +33,7 @@ library:
   source-dirs: src
 
 executables:
-  column-grep-exe:
+  column-grep:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
