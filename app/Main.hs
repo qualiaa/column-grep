@@ -31,7 +31,6 @@ type Comparators = M.Map FieldIndex [RE.Regex]
 main :: IO ()
 main = do
   args <- getArgs
-  (firstLine, remainingLines) <- LC8.span (`notElem` recordSeparators) <$> LC8.getContents
   let parseResults = parseArguments args
 
   if any isLeft parseResults then
@@ -39,14 +38,16 @@ main = do
         (arg, Left err) -> putStrLn $ "Error parsing argument `" ++ arg ++ "': " ++ err
         _ -> return ())
 
-  else do
-    let columnNames = C8.split fieldSeparator $ LC8.toStrict firstLine
+  else uncurry process . partitionEithers $ rights parseResults
+
+process outputColumnSpecs  comparatorSpecs = do
+    (firstLine, remainingLines) <- LC8.span (`notElem` recordSeparators) <$> LC8.getContents
+
+    let columnNames = toFields firstLine
         numColumns = length columnNames
 
         resolveColspecs = fmap allSucceed . mapM (ColSpec.resolve columnNames numColumns)
         resolveComparator = fmap bothSucceed . bimapM resolveColspecs RE.compile
-
-        (outputColumnSpecs, comparatorSpecs) = partitionEithers $ rights parseResults
 
     resolvedOutputColumns <- resolveColspecs $ concat outputColumnSpecs
     resolvedComparators <- sequence <$> mapM resolveComparator comparatorSpecs :: IO (Result [([FieldIndex], RE.Regex)])
@@ -55,16 +56,20 @@ main = do
       outputColumns <- resolvedOutputColumns
       comparators <- resolvedComparators
 
-      let filterFields' = map (filterFields $ S.fromList outputColumns)
+      let outputColumns' = S.fromList outputColumns
+          filterFields' = map (filterFields outputColumns')
           filterRecords' = filterRecords $ comparatorsByColumn comparators
 
       processRecords <- case (outputColumns, comparators) of
-        ([], []) -> Left "Must specify at least one columnspec or comparator"
-        (_, [])  -> return $ filterFields'
-        ([], _)  -> return $ filterRecords'
+        ([], []) -> Left "Must specify at least one column-spec or comparator"
+        (_, [])  -> return filterFields'
+        ([], _)  -> return filterRecords'
         (_, _)   -> return $ filterFields' . filterRecords'
 
-      return $ processRecords `withRecords` remainingLines
+      let newHeader = fromFields $ filterFields outputColumns' columnNames
+          newBody = processRecords `withRecords` remainingLines
+
+      return $ LC8.append (newHeader `LC8.snoc` outputRecordSeparator) newBody
 
       ) of Left err -> putStrLn err
            Right lines -> LC8.putStrLn lines
@@ -90,14 +95,19 @@ filterFields targetIndices = withIndices $ filter keep
 
 toRecords :: LC8.ByteString -> [Record]
 toRecords string =
-  let recordStrings = LC8.splitWith (`elem` recordSeparators) string
-      recordStringToFields = map LC8.toStrict . LC8.split fieldSeparator in
-    map recordStringToFields recordStrings
+  let recordStrings = LC8.splitWith (`elem` recordSeparators) string in
+    map toFields recordStrings
+
+toFields :: LC8.ByteString -> [Field]
+toFields = C8.split fieldSeparator . LC8.toStrict
 
 fromRecords :: [Record] -> LC8.ByteString
 fromRecords records =
-  let lines = map (LC8.fromStrict . C8.intercalate (C8.singleton fieldSeparator)) records in
+  let lines = map fromFields records in
     LC8.intercalate (LC8.singleton outputRecordSeparator) lines
+
+fromFields :: [Field] -> LC8.ByteString
+fromFields = LC8.fromStrict . C8.intercalate (C8.singleton fieldSeparator)
 
 withRecords :: ([Record] -> [Record]) -> LC8.ByteString -> LC8.ByteString
 withRecords = dimap toRecords fromRecords
