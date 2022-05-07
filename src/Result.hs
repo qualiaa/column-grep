@@ -8,7 +8,8 @@ import Data.Bitraversable
 type Result = Either String
 
 allSucceed :: [Result [a]] -> Result [a]
-allSucceed = foldr1 concatResult
+allSucceed [] = Right []
+allSucceed results = foldr1 concatResult results
   where concatResult err@(Left _) _ = err
         concatResult x a = (++) <$> x <*> a
 
