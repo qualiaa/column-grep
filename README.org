@@ -1,0 +1,50 @@
+#+title: =column-grep=
+
+=column-grep= is a small command-line tool for chopping up CSVs - performing a
+common =awk= task, but more efficiently.
+
+* Installation
+
+ 1. Ensure Haskell Stack is [[https://docs.haskellstack.org/en/stable/install_and_upgrade/][installed]].
+
+ 2. Clone the repository with
+
+    #+begin_src shell
+    git clone https://github.com/qualiaa/column-grep
+    #+end_src
+
+ 3. Enter the repository root with ~cd column-grep~
+
+ 4. Run inplace with ~stack run column-grep~ or install for your user with  or ~stack install~
+
+* Usage
+
+=column-grep= takes a description of which rows and columns to print, and then
+filters its input accordingly. The description is provided as arguments, the
+input is provided over =stdin= and the output is printed to =stdout=.
+
+The filter descriptions are built up of /output/s and /comparator/s:
+
+#+begin_src shell
+  column-grep [output|comparator] ... < input.csv > output.csv
+#+end_src
+
+An /output/ is a /column-spec/. A /column-spec/ is either a /name/, an /index/,
+or a /range/ of indices.
+
+A /comparator/ is one or more comma-delimited /column-spec/s, followed by an ===
+and a single /name/. Put another way, ~column-spec[,column-spec ...]=name=. For
+example, =/Age$/=300= will match all columns whose name ends in =Age=, and match
+all rows where any of these columns' values equals =300=.
+
+A /name/ is a regex, surrounded in =/=s, such as =/a.*c?e+$/=, or a raw string
+such as =Age=. Regex matching occurs throughout the string, so the =^$= anchors
+are important for efficient matching. A raw string =Age= is equivalent to
+=/^abc$/=.
+
+An /index/ is an integer. Columns are indexed from =1=. Negative indices are
+permitted, where =-1= refers to the last column, =-2= the second-to-last, /&c./
+
+A /range/ is specified as =[index]:[index]=, where indices are inclusive. If
+either index is not specified, such as in =5:=, =:-2= or =:=, it is takes the
+whole remaining range (so =:= matches every column).

@@ -7,7 +7,7 @@ maintainer:          "jamiebayne@hotmail.com"
 copyright:           "Jamie Bayne"
 
 extra-source-files:
-- README.md
+- README.org
 - ChangeLog.md
 
 # Metadata used when publishing your package
