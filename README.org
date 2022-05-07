@@ -23,7 +23,7 @@ common =awk= task, but more efficiently.
 filters its input accordingly. The description is provided as arguments, the
 input is provided over =stdin= and the output is printed to =stdout=.
 
-The filter descriptions are built up of /output/s and /comparator/s:
+The filter descriptions are built up of /output/\zwnj{}s and /comparator/\zwnj{}s:
 
 #+begin_src shell
   column-grep [output|comparator] ... < input.csv > output.csv
@@ -32,8 +32,8 @@ The filter descriptions are built up of /output/s and /comparator/s:
 An /output/ is a /column-spec/. A /column-spec/ is either a /name/, an /index/,
 or a /range/ of indices.
 
-A /comparator/ is one or more comma-delimited /column-spec/s, followed by an ===
-and a single /name/. Put another way, ~column-spec[,column-spec ...]=name=. For
+A /comparator/ is one or more comma-delimited /column-spec/\zwnj{}s, followed by an ~=~
+and a single /name/. Put another way, ~column-spec[,column-spec ...]=name~. For
 example, =/Age$/=300= will match all columns whose name ends in =Age=, and match
 all rows where any of these columns' values equals =300=.
 
