@@ -66,7 +66,9 @@ process outputColumnSpecs  comparatorSpecs = do
         ([], _)  -> return filterRecords'
         (_, _)   -> return $ filterFields' . filterRecords'
 
-      let newHeader = fromFields $ filterFields outputColumns' columnNames
+      let newHeader = if null outputColumns
+            then firstLine
+            else fromFields $ filterFields outputColumns' columnNames
           newBody = processRecords `withRecords` remainingLines
 
       return $ LC8.append (newHeader `LC8.snoc` outputRecordSeparator) newBody
