@@ -38,6 +38,7 @@ library
     , base >=4.7 && <5
     , bytestring
     , containers
+    , profunctors
     , regex-base
     , regex-pcre
     , word8
@@ -56,6 +57,7 @@ executable column-grep-exe
     , bytestring
     , column-grep
     , containers
+    , profunctors
     , regex-base
     , regex-pcre
     , word8
@@ -75,6 +77,7 @@ test-suite column-grep-test
     , bytestring
     , column-grep
     , containers
+    , profunctors
     , regex-base
     , regex-pcre
     , word8
