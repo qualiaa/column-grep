@@ -74,13 +74,13 @@ process outputColumnSpecs  comparatorSpecs = do
 
       let outputColumns' = S.fromList $ resolveNegations numColumns outputColumns
           filterFields' = map (filterFields outputColumns')
-          filterRecords' = filterRecords $ comparatorsByColumn numColumns comparators
+          filterRecords = filter (recordMatches $ comparatorsByColumn numColumns comparators)
 
       processRecords <- case (outputColumns, comparators) of
         ([], []) -> Left "Must specify at least one column-spec or comparator"
         (_, [])  -> return filterFields'
-        ([], _)  -> return filterRecords'
-        (_, _)   -> return $ filterFields' . filterRecords'
+        ([], _)  -> return filterRecords
+        (_, _)   -> return $ filterFields' . filterRecords
 
       let newHeader = if null outputColumns
             then firstLine
@@ -108,16 +108,13 @@ comparatorsByColumn numFields = foldl' addToMap M.empty
 
 
 type MatchResult = Maybe Bool
-filterRecords :: Comparators  -> [Record] -> [Record]
-filterRecords comparators = filter recordMatches
+recordMatches :: Comparators  -> Record -> Bool
+recordMatches comparators record =
+  let matchResults = map fieldMatches $ zip [1..] record
+      anyFieldMatches = or <$> sequence matchResults in
+    fromMaybe False anyFieldMatches
 
-  where recordMatches :: Record -> Bool
-        recordMatches record =
-          let matchResults = map fieldMatches $ zip [1..] record
-              anyFieldMatches = or <$> sequence matchResults in
-            fromMaybe False anyFieldMatches
-
-        fieldMatches :: (FieldIndex, Field) -> MatchResult
+  where fieldMatches :: (FieldIndex, Field) -> MatchResult
         fieldMatches (fieldIndex, field) =
           let allRegexes = M.findWithDefault [] fieldIndex comparators
               (negative, positive) = bimapBoth (map snd) $ partition fst allRegexes
