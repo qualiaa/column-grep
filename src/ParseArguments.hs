@@ -14,6 +14,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C8
 
 import ColSpec
+import Result
 
 pcreSpecialCharacters = BS.unpack "\\|?*+.^${[()"
 
@@ -22,9 +23,10 @@ equals = c2w '='
 colon = c2w ':'
 backslash = c2w '\\'
 slash = c2w '/'
+exclamationMark = c2w '!'
 
-type OutputColumns = [ColSpec]
-type Comparator = ([ColSpec], UncompiledRegex)
+type OutputColumns = [(Bool, ColSpec)]
+type Comparator = ([(Bool, ColSpec)], (Bool, UncompiledRegex))
 
 regexEscape :: [Word8] -> [Word8]
 regexEscape [] = []
@@ -35,8 +37,9 @@ regexEscape (c:cs)
 parseLiteralMatch :: P.Parser UncompiledRegex
 parseUncompiledRegex :: P.Parser UncompiledRegex
 parseColRange :: P.Parser Range
-parseColSpec :: P.Parser ColSpec
+parseColSpec :: P.Parser (Bool, ColSpec)
 parseArgument :: P.Parser (Either OutputColumns Comparator)
+parseArguments :: [String] -> [Result (Either OutputColumns Comparator)]
 
 parseUncompiledRegex = UncompiledRegex <$> regexString
   where regexString = BS.pack <$> (P.word8 slash >> P.manyTill regexChar (P.word8 slash))
@@ -70,18 +73,22 @@ parseRangeFrom = RangeFrom <$> parseIndex <* P.word8 colon
 
 parseColRange = P.choice [parseRangeTo, parseRangeFull, parseRange, parseRangeFrom]
 
-parseColSpec = ColRange <$> parseColRange
-           <|> ColIndex <$> parseIndex
-           <|> ColName <$> (parseUncompiledRegex <|> parseLiteralMatch)
+parseColSpec = withNegation matchRule
+  where matchRule = ColRange <$> parseColRange
+                <|> ColIndex <$> parseIndex
+                <|> ColName <$> (parseUncompiledRegex <|> parseLiteralMatch)
+
+withNegation :: P.Parser p -> P.Parser (Bool, p)
+withNegation p = (,) <$> negation <*> p
+  where negation = (P.word8 exclamationMark >> return True) <|> return False
 
 parseArgument = do
   targetCols <- P.sepBy1 parseColSpec (P.word8 comma)
   finished <- P.atEnd
   if finished
     then return $ Left targetCols
-    else let comparison = (P.word8 equals
-                           P.<?> "Expected '=' (ambiguous parse?)")
-                          *> (parseUncompiledRegex <|> parseLiteralMatch)
+    else let comparison = (P.word8 equals P.<?> "Expected '=' (ambiguous parse?)")
+                          *> withNegation (parseUncompiledRegex <|> parseLiteralMatch)
          in Right . (targetCols,) <$> comparison
 
 parseArguments = map (P.parseOnly parseArgument . C8.pack)

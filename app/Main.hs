@@ -2,10 +2,12 @@
 module Main where
 
 
-import Control.Monad(forM_)
-import Data.Bitraversable (bimapM)
-import Data.List (foldl')
+import Control.Monad(forM_, liftM2)
+import Data.Bifunctor (second, bimap)
+import Data.Bitraversable (bisequence)
+import Data.List (foldl', partition)
 import Data.Either
+import Data.Maybe (fromMaybe)
 import Data.Profunctor (dimap)
 import System.Environment (getArgs)
 import Text.Regex.Base (matchTest)
@@ -26,7 +28,7 @@ outputRecordSeparator = '\n'
 type Field = C8.ByteString
 type Record = [Field]
 type FieldIndex = Int
-type Comparators = M.Map FieldIndex [RE.Regex]
+type Comparators = M.Map FieldIndex [(Bool, RE.Regex)]
 
 main :: IO ()
 main = do
@@ -38,27 +40,41 @@ main = do
         (arg, Left err) -> putStrLn $ "Error parsing argument `" ++ arg ++ "': " ++ err
         _ -> return ())
 
-  else uncurry process . partitionEithers $ rights parseResults
+  else let (outputColumns, comparators) = partitionEithers $ rights parseResults in
+    process (concat outputColumns) comparators
 
+process :: OutputColumns -> [Comparator] -> IO ()
 process outputColumnSpecs  comparatorSpecs = do
     (firstLine, remainingLines) <- LC8.span (`notElem` recordSeparators) <$> LC8.getContents
 
     let columnNames = toFields firstLine
         numColumns = length columnNames
 
-        resolveColspecs = fmap allSucceed . mapM (ColSpec.resolve columnNames numColumns)
-        resolveComparator = fmap bothSucceed . bimapM resolveColspecs RE.compile
+        -- thisisfine.jpg
+        resolveColspec :: ColSpec.ColSpec -> IO (Result [FieldIndex])
+        resolveColspecs :: [(Bool, ColSpec.ColSpec)]
+                        -> IO (Result [(Bool, [FieldIndex])])
+        resolveColspec = ColSpec.resolve columnNames numColumns
+        resolveColspecs = seq2 <$> map (seq2 . second resolveColspec)
 
-    resolvedOutputColumns <- resolveColspecs $ concat outputColumnSpecs
-    resolvedComparators <- sequence <$> mapM resolveComparator comparatorSpecs :: IO (Result [([FieldIndex], RE.Regex)])
+
+        resolveComparator :: ([(Bool, ColSpec.ColSpec)], (Bool, RE.UncompiledRegex))
+                          -> IO (Result ([(Bool, [Int])], (Bool, RE.Regex)))
+        resolveComparator =  biseq2 . bimap resolveColspecs (seq2 . second RE.compile)
+
+        resolveComparators :: [Comparator] -> IO (Result [([(Bool, [Int])], (Bool, RE.Regex))])
+        resolveComparators = seq2 <$> map resolveComparator
+
+    resolvedOutputColumns <- resolveColspecs outputColumnSpecs
+    resolvedComparators <- resolveComparators comparatorSpecs :: IO (Result [([(Bool, [FieldIndex])], (Bool, RE.Regex))])
 
     case (do
       outputColumns <- resolvedOutputColumns
       comparators <- resolvedComparators
 
-      let outputColumns' = S.fromList outputColumns
+      let outputColumns' = S.fromList $ resolveNegations numColumns outputColumns
           filterFields' = map (filterFields outputColumns')
-          filterRecords' = filterRecords $ comparatorsByColumn comparators
+          filterRecords' = filterRecords $ comparatorsByColumn numColumns comparators
 
       processRecords <- case (outputColumns, comparators) of
         ([], []) -> Left "Must specify at least one column-spec or comparator"
@@ -76,18 +92,37 @@ process outputColumnSpecs  comparatorSpecs = do
       ) of Left err -> putStrLn err
            Right lines -> LC8.putStrLn lines
 
-comparatorsByColumn :: [([FieldIndex], RE.Regex)] -> Comparators
-comparatorsByColumn = foldl' addToMap M.empty
-  where addToMap m (ix, re) = foldl' (\m i -> M.insertWith (++) i [re] m) m ix
+resolveNegations :: FieldIndex -> [(Bool, [FieldIndex])] -> [FieldIndex]
+resolveNegations _ [] = []
+resolveNegations numFields specs = positive' `subtract` negative
 
+  where (negative, positive) = bimapBoth (>>= snd) $ partition fst specs
+        positive' = if null positive then [1..numFields] else positive
+        subtract = foldl' removeFrom
+        removeFrom l x = filter (/=x) l
+
+
+comparatorsByColumn :: FieldIndex -> [([(Bool, [FieldIndex])], (Bool, RE.Regex))] -> Comparators
+comparatorsByColumn numFields = foldl' addToMap M.empty
+  where addToMap m (ix, re) = foldl' (\m i -> M.insertWith (++) i [re] m) m (resolveNegations numFields ix)
+
+
+type MatchResult = Maybe Bool
 filterRecords :: Comparators  -> [Record] -> [Record]
-filterRecords comparators = filter keep
-  where keep = or . map fieldMatches . zip [1..]
+filterRecords comparators = filter recordMatches
 
-        fieldMatches :: (FieldIndex, Field) -> Bool
+  where recordMatches :: Record -> Bool
+        recordMatches record =
+          let matchResults = map fieldMatches $ zip [1..] record
+              anyFieldMatches = or <$> sequence matchResults in
+            fromMaybe False anyFieldMatches
+
+        fieldMatches :: (FieldIndex, Field) -> MatchResult
         fieldMatches (fieldIndex, field) =
-          let regexes = M.findWithDefault [] fieldIndex comparators in
-            or $ matchTest <$> regexes <*> pure field
+          let allRegexes = M.findWithDefault [] fieldIndex comparators
+              (negative, positive) = bimapBoth (map snd) $ partition fst allRegexes
+              matchAny' rs = matchAny rs [field]
+            in if matchAny' negative then Nothing else Just $ matchAny' positive
 
 -- TODO: Add options to a) allow duplication and b) respect colspec ordering
 filterFields :: S.Set FieldIndex -> [Field] -> [Field]
@@ -116,3 +151,18 @@ withRecords = dimap toRecords fromRecords
 
 withIndices :: (Integral i) => ([(i, a)] -> [(i, b)]) -> [a] -> [b]
 withIndices = dimap (zip [1..]) (map snd)
+
+bimapBoth f = bimap f f
+
+seq2 :: (Monad m, Monad n, Traversable t) => t (m (n  a)) -> m (n (t a))
+seq2 x = sequence <$> sequence x
+
+biseq2 x = bisequence <$> bisequence x
+
+xor :: Bool -> Bool -> Bool
+xor a b = a /= b
+
+matchMany :: [RE.Regex] -> [C8.ByteString] -> [Bool]
+matchMany = liftM2 matchTest
+
+matchAny rs ss = or $ matchMany rs ss
