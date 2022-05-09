@@ -13,6 +13,7 @@ import qualified Data.ByteString as BS
 import qualified Text.Regex.Base as RE
 
 import Regex
+import Result
 
 data ColSpec = ColRange Range | ColIndex Int | ColName UncompiledRegex
     deriving Show
@@ -20,7 +21,6 @@ data ColSpec = ColRange Range | ColIndex Int | ColName UncompiledRegex
 data Range = RangeFull | RangeTo Int | RangeFrom Int | Range Int Int
     deriving Show
 
-type Result = Either String
 
 indices :: Int -> Range -> [Int]
 indices maxIndex range = case range of

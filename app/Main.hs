@@ -3,7 +3,7 @@ module Main where
 
 
 import Control.Monad(forM_, liftM2)
-import Data.Bifunctor (second, bimap)
+import Data.Bifunctor (bimap, second)
 import Data.Bitraversable (bisequence)
 import Data.List (foldl', partition)
 import Data.Either
@@ -40,21 +40,21 @@ main = do
         (arg, Left err) -> putStrLn $ "Error parsing argument `" ++ arg ++ "': " ++ err
         _ -> return ())
 
-  else let (outputColumns, comparators) = partitionEithers $ rights parseResults in
-    process (concat outputColumns) comparators
+  else let (outputColumnSpecs, comparators) = partitionEithers $ rights parseResults in
+    process (concat outputColumnSpecs) comparators
 
 process :: OutputColumns -> [Comparator] -> IO ()
 process outputColumnSpecs  comparatorSpecs = do
-    (firstLine, remainingLines) <- LC8.span (`notElem` recordSeparators) <$> LC8.getContents
+    (firstRecordString, remainingRecordsString) <- second (LC8.drop 1) .  LC8.span (`notElem` recordSeparators) <$> LC8.getContents
 
-    let columnNames = toFields firstLine
-        numColumns = length columnNames
+    let fieldNames = toFields firstRecordString
+        numFields = length fieldNames
 
         -- thisisfine.jpg
         resolveColspec :: ColSpec.ColSpec -> IO (Result [FieldIndex])
         resolveColspecs :: [(Bool, ColSpec.ColSpec)]
                         -> IO (Result [(Bool, [FieldIndex])])
-        resolveColspec = ColSpec.resolve columnNames numColumns
+        resolveColspec = ColSpec.resolve fieldNames numFields
         resolveColspecs = seq2 <$> map (seq2 . second resolveColspec)
 
 
@@ -65,32 +65,32 @@ process outputColumnSpecs  comparatorSpecs = do
         resolveComparators :: [Comparator] -> IO (Result [([(Bool, [Int])], (Bool, RE.Regex))])
         resolveComparators = seq2 <$> map resolveComparator
 
-    resolvedOutputColumns <- resolveColspecs outputColumnSpecs
+    resolvedOutputFields <- resolveColspecs outputColumnSpecs
     resolvedComparators <- resolveComparators comparatorSpecs :: IO (Result [([(Bool, [FieldIndex])], (Bool, RE.Regex))])
 
     case (do
-      outputColumns <- resolvedOutputColumns
+      outputFields <- resolvedOutputFields
       comparators <- resolvedComparators
 
-      let outputColumns' = S.fromList $ resolveNegations numColumns outputColumns
-          filterFields' = map (filterFields outputColumns')
-          filterRecords = filter (recordMatches $ comparatorsByColumn numColumns comparators)
+      let outputFields' = S.fromList $ resolveNegations numFields outputFields
+          filterFields' = map (filterFields outputFields')
+          filterRecords = filter (recordMatches $ comparatorsByFieldIndex numFields comparators)
 
-      processRecords <- case (outputColumns, comparators) of
+      processRecords <- case (outputFields, comparators) of
         ([], []) -> Left "Must specify at least one column-spec or comparator"
         (_, [])  -> return filterFields'
         ([], _)  -> return filterRecords
         (_, _)   -> return $ filterFields' . filterRecords
 
-      let newHeader = if null outputColumns
-            then firstLine
-            else fromFields $ filterFields outputColumns' columnNames
-          newBody = processRecords `withRecords` remainingLines
+      let newHeader = if null outputFields
+            then firstRecordString
+            else fromFields $ filterFields outputFields' fieldNames
+          newBody = processRecords `withRecords` remainingRecordsString
 
       return $ LC8.append (newHeader `LC8.snoc` outputRecordSeparator) newBody
 
       ) of Left err -> putStrLn err
-           Right lines -> LC8.putStrLn lines
+           Right outputString -> LC8.putStrLn outputString
 
 resolveNegations :: FieldIndex -> [(Bool, [FieldIndex])] -> [FieldIndex]
 resolveNegations _ [] = []
@@ -102,8 +102,8 @@ resolveNegations numFields specs = positive' `subtract` negative
         removeFrom l x = filter (/=x) l
 
 
-comparatorsByColumn :: FieldIndex -> [([(Bool, [FieldIndex])], (Bool, RE.Regex))] -> Comparators
-comparatorsByColumn numFields = foldl' addToMap M.empty
+comparatorsByFieldIndex :: FieldIndex -> [([(Bool, [FieldIndex])], (Bool, RE.Regex))] -> Comparators
+comparatorsByFieldIndex numFields = foldl' addToMap M.empty
   where addToMap m (ix, re) = foldl' (\m i -> M.insertWith (++) i [re] m) m (resolveNegations numFields ix)
 
 
@@ -129,16 +129,17 @@ filterFields targetIndices = withIndices $ filter keep
 
 toRecords :: LC8.ByteString -> [Record]
 toRecords string =
-  let recordStrings = LC8.splitWith (`elem` recordSeparators) string in
-    map toFields recordStrings
+  let recordStrings = LC8.splitWith (`elem` recordSeparators) string
+      nonEmptyRecordStrings = filter (not . LC8.null) recordStrings in
+    map toFields nonEmptyRecordStrings
 
 toFields :: LC8.ByteString -> [Field]
 toFields = C8.split fieldSeparator . LC8.toStrict
 
 fromRecords :: [Record] -> LC8.ByteString
 fromRecords records =
-  let lines = map fromFields records in
-    LC8.intercalate (LC8.singleton outputRecordSeparator) lines
+  let recordStrings = map fromFields records in
+    LC8.intercalate (LC8.singleton outputRecordSeparator) recordStrings
 
 fromFields :: [Field] -> LC8.ByteString
 fromFields = LC8.fromStrict . C8.intercalate (C8.singleton fieldSeparator)
