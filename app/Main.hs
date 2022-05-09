@@ -3,6 +3,7 @@ module Main where
 
 
 import Control.Monad(forM_)
+import Data.Bifunctor (second)
 import Data.Bitraversable (bimapM)
 import Data.List (foldl')
 import Data.Either
@@ -41,43 +42,43 @@ main = do
   else uncurry process . partitionEithers $ rights parseResults
 
 process outputColumnSpecs  comparatorSpecs = do
-    (firstLine, remainingLines) <- LC8.span (`notElem` recordSeparators) <$> LC8.getContents
+    (firstRecordString, remainingRecordsString) <- second (LC8.drop 1) .  LC8.span (`notElem` recordSeparators) <$> LC8.getContents
 
-    let columnNames = toFields firstLine
-        numColumns = length columnNames
+    let fieldNames = toFields firstRecordString
+        numFields = length fieldNames
 
-        resolveColspecs = fmap allSucceed . mapM (ColSpec.resolve columnNames numColumns)
+        resolveColspecs = fmap allSucceed . mapM (ColSpec.resolve fieldNames numFields)
         resolveComparator = fmap bothSucceed . bimapM resolveColspecs RE.compile
 
-    resolvedOutputColumns <- resolveColspecs $ concat outputColumnSpecs
+    resolvedOutputFields <- resolveColspecs $ concat outputColumnSpecs
     resolvedComparators <- sequence <$> mapM resolveComparator comparatorSpecs :: IO (Result [([FieldIndex], RE.Regex)])
 
     case (do
-      outputColumns <- resolvedOutputColumns
+      outputFields <- resolvedOutputFields
       comparators <- resolvedComparators
 
-      let outputColumns' = S.fromList outputColumns
-          filterFields' = map (filterFields outputColumns')
-          filterRecords' = filterRecords $ comparatorsByColumn comparators
+      let outputFields' = S.fromList outputFields
+          filterFields' = map (filterFields outputFields')
+          filterRecords' = filterRecords $ comparatorsByFieldIndex comparators
 
-      processRecords <- case (outputColumns, comparators) of
+      processRecords <- case (outputFields, comparators) of
         ([], []) -> Left "Must specify at least one column-spec or comparator"
         (_, [])  -> return filterFields'
         ([], _)  -> return filterRecords'
         (_, _)   -> return $ filterFields' . filterRecords'
 
-      let newHeader = if null outputColumns
-            then firstLine
-            else fromFields $ filterFields outputColumns' columnNames
-          newBody = processRecords `withRecords` remainingLines
+      let newHeader = if null outputFields
+            then firstRecordString
+            else fromFields $ filterFields outputFields' fieldNames
+          newBody = processRecords `withRecords` remainingRecordsString
 
       return $ LC8.append (newHeader `LC8.snoc` outputRecordSeparator) newBody
 
       ) of Left err -> putStrLn err
-           Right lines -> LC8.putStrLn lines
+           Right outputString -> LC8.putStrLn outputString
 
-comparatorsByColumn :: [([FieldIndex], RE.Regex)] -> Comparators
-comparatorsByColumn = foldl' addToMap M.empty
+comparatorsByFieldIndex :: [([FieldIndex], RE.Regex)] -> Comparators
+comparatorsByFieldIndex = foldl' addToMap M.empty
   where addToMap m (ix, re) = foldl' (\m i -> M.insertWith (++) i [re] m) m ix
 
 filterRecords :: Comparators  -> [Record] -> [Record]
@@ -97,16 +98,17 @@ filterFields targetIndices = withIndices $ filter keep
 
 toRecords :: LC8.ByteString -> [Record]
 toRecords string =
-  let recordStrings = LC8.splitWith (`elem` recordSeparators) string in
-    map toFields recordStrings
+  let recordStrings = LC8.splitWith (`elem` recordSeparators) string
+      nonEmptyRecordStrings = filter (not . LC8.null) recordStrings in
+    map toFields nonEmptyRecordStrings
 
 toFields :: LC8.ByteString -> [Field]
 toFields = C8.split fieldSeparator . LC8.toStrict
 
 fromRecords :: [Record] -> LC8.ByteString
 fromRecords records =
-  let lines = map fromFields records in
-    LC8.intercalate (LC8.singleton outputRecordSeparator) lines
+  let recordStrings = map fromFields records in
+    LC8.intercalate (LC8.singleton outputRecordSeparator) recordStrings
 
 fromFields :: [Field] -> LC8.ByteString
 fromFields = LC8.fromStrict . C8.intercalate (C8.singleton fieldSeparator)
